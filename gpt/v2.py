@@ -94,6 +94,20 @@ class MultiHeadAttention(nn.Module):
         return torch.cat([h(x) for h in self.heads], dim=-1)
 
 
+class AttentionBlock(nn.Module):
+
+    def __init__(self, block_size, n_embed, n_head):
+        super().__init__()
+        head_size = n_embed//n_head
+        self.sa = MultiHeadAttention(n_head, block_size, head_size)
+        self.mlp = FeedForward(n_embed)
+
+    def forward(self, x):
+        x = self.sa(x)
+        x = self.mlp(x)
+        return x
+
+
 class FeedForward(nn.Module):
 
     def __init__(self, n_dim):
@@ -117,9 +131,8 @@ class BigramLanguageModel(nn.Module):
         # table for position encoding
         self.position_embedding_table = nn.Embedding(block_size, n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
-        self.feed_fw = FeedForward(n_embed)
         # self.head = Head(block_size, head_size=n_embed)
-        self.head = MultiHeadAttention(4, block_size, head_size=n_embed//4)
+        self.head = AttentionBlock(block_size, n_embed, 4)
 
     def forward(self, idx, targets=None):
 
@@ -133,7 +146,6 @@ class BigramLanguageModel(nn.Module):
         # increace channels from n_embed to vocab_size using only C dim
         x = tok_emb + pos_emb
         x = self.head(x)
-        x = self.feed_fw(x)  # agregate heads outputs with feed forward
         logits = self.lm_head(x)  # (B, T, C=vocab_size)
 
         if targets is None:
